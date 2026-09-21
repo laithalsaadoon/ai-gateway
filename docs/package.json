@@ -9,10 +9,10 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "@astrojs/markdown-remark": "^7.3.0",
+    "@astrojs/markdown-remark": "^7.3.1",
     "@astrojs/sitemap": "^3.7.4",
     "@astrojs/starlight": "^0.42.0",
-    "astro": "^7.3.1",
+    "astro": "^7.3.2",
     "astro-mermaid": "^2.1.0",
     "mermaid": "^11.17.2",
     "remark-gfm": "^4.0.1",
