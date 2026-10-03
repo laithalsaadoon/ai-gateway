@@ -30,8 +30,9 @@
     "overrides": {
       "lodash-es": ">=4.18.0",
       "esbuild": ">=0.28.1",
-      "dompurify": ">=3.4.13",
-      "nanoid": ">=3.3.18 <4"
+      "dompurify": ">=3.4.16 <4",
+      "nanoid": ">=3.3.18 <4",
+      "devalue": ">=5.9.3 <6"
     }
   }
 }
