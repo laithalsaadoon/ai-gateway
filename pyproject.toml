@@ -35,6 +35,7 @@ constraint-dependencies = [
 # 7-day exclude-newer soak window, so the security fix is exempted from it.
 [tool.uv.exclude-newer-package]
 cryptography = "2026-08-04"
+certifi = "2026-10-24"  # PYSEC-2026-4320 (GHSA-6q48-6c7w-9gw2): emSign roots with compromised intermediates
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
