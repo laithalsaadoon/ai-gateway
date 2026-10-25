@@ -87,7 +87,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload Grype SARIF
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         if: always()
         continue-on-error: true
         with:
@@ -97,7 +97,7 @@ jobs:
       # ── OSV-Scanner: check lockfiles against OSV database ──
       - name: OSV-Scanner lockfile scan
         id: osv
-        uses: google/osv-scanner-action/osv-scanner-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
+        uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
         with:
           scan-args: |-
             --lockfile=uv.lock
@@ -107,7 +107,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload OSV-Scanner SARIF
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         if: always()
         continue-on-error: true
         with:
@@ -224,7 +224,7 @@ jobs:
           trivyignores: .trivyignore
 
       - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         if: always()
         continue-on-error: true
         with:
