@@ -13,7 +13,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
-    "ruff>=0.17.0",
+    "ruff>=0.17.1",
     "pyright>=1.1.414",
     "boto3-stubs>=1.43.111",
     "hypothesis>=6.169.0",
