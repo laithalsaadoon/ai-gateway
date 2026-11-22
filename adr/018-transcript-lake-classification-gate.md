@@ -1,108 +1,70 @@
 # ADR-018: Governed transcript lake with a classification-first privacy gate
 
-- **Status:** Proposed
-- **Date:** 2026-08-03
-- **Relates to:** ADR-010 (cost attribution), ADR-011 (Bedrock Guardrails), ADR-014 (two-plane split), ADR-016 (control-plane foundation), ADR-017 (agentgateway data plane)
+**Status**: Proposed
+**Date**: 2026-11-22
+**Deciders**: Project maintainers
+**Relates to**: ADR-010 (cost attribution), ADR-011 (Bedrock Guardrails), ADR-014 (two-plane split), ADR-016 (control-plane foundation), ADR-017 (agentgateway data plane)
+
+This ADR records a direction. Nothing in it is scheduled or built.
 
 ## Decision (lead)
 
-Add a governed transcript lake: agent/coding-assistant transcripts flowing through the gateway are captured into a short-retention quarantine zone, classified against a tenant-owned sensitive-data taxonomy, and only then promoted — as ATIF v1.7 trajectories in S3 Tables (Iceberg) — into a queryable lake for eval harvesting, SFT/RL data mining, and analytics. Classification is the core of the feature; entity-level PII redaction is a supporting module, not the headline.
-
-The privacy boundary is **at rest, before promotion** — never in the request path. The data plane stays fast and lossless; nothing becomes queryable until the gate has run.
+If the gateway ever keeps agent transcripts for eval harvesting and analytics, it does so through a governed lake behind a classification gate. Transcripts land in a short-retention quarantine zone, get classified against a tenant-owned sensitive-data taxonomy, and only then get promoted into a queryable store. Classification is the core of the feature. Entity-level PII redaction is a supporting piece.
 
 ## Context
 
-Organizations running coding assistants at scale want a transcript data lake (eval harvesting, failure classification, SFT corpora) but hesitate to build one, because developers incidentally discuss sensitive material with the assistant. The hard case is not entity PII: **HR, performance management, and other sensitive or classified transcripts** are the representative example, and no regex or PII classifier catches them — it is a data-classification problem. Emails, ARNs, and account IDs are the easy, commodity part; "should this conversation exist in a lake at all" is the feature.
+Teams running coding assistants at scale want a transcript lake, but developers sometimes discuss sensitive material with the assistant. The hard case is not entity PII. HR, performance management, legal and other sensitive conversations contain no detectable entities, so no regex or PII classifier catches them. Deciding whether a conversation belongs in a lake at all is a data-classification problem.
 
-The repo already has the substrate: the inline Bedrock guardrail runs detect/log-only in the data plane (ADR-011/017), cost_attribution parses the agentgateway access log, and the `audit_log` module ships Firehose → S3 Parquet with a Glue catalog. What is missing is body capture, the classification gate, the ATIF assembler, and the governed lake itself.
+What exists on main today:
 
-## Architecture
+- The data plane is the upstream agentgateway image pinned by digest (ADR-017). Content safety runs inline through the Bedrock ApplyGuardrail API in detect and log-only mode, so the request path never rewrites content.
+- `cost_attribution` parses agentgateway's flat access log, which carries identity and token counts and no bodies.
+- `audit_pipeline` writes control-plane audit events and guardrail decisions through Firehose into Apache Iceberg tables on S3 Tables (ADR-016, ADR-017). `audit_query` reads them with Athena. The older `audit_log` module (Firehose to Parquet with a Glue catalog) is the legacy pipeline that `audit_pipeline` succeeds.
+- Nothing captures request or response bodies, and there is no classifier, quarantine bucket or transcript store.
 
-```
-agentgateway (data plane)
-  │  request/response bodies + access-log identity/usage
-  ▼
-QUARANTINE  s3://…-transcript-quarantine/   (KMS, no human-readable principal,
-  │                                          7–30 day lifecycle expiry)
-  ▼
-Step Functions redaction/classification pipeline (async, near-line)
-  ├─ Stage 1 screen   — embeddings vs per-category seed phrases + deterministic
-  │                     marking/keyword detectors (CUI banners are greppable);
-  │                     tuned for recall, flags ~5–10% of traffic to Stage 2
-  ├─ Stage 2 judge    — Haiku-class LLM, tenant rubric in prompt; emits
-  │                     {label, confidence, quoted-span justification}
-  ├─ Entity redaction — ApplyGuardrail (baseline, already IAM-wired) +
-  │                     Presidio w/ tenant custom recognizers (self-hosted,
-  │                     in-VPC); typed placeholders {{EMAIL_1}}, HMAC
-  │                     pseudonyms (per-tenant key) so joins survive
-  ├─ Secrets scan     — gitleaks/trufflehog rulepacks; redact + optional
-  │                     security event (a secret in a transcript is a live leak)
-  └─ ATIF assembler   — build + validate ATIF v1.7 (atif~=1.7.0 Pydantic models)
-  ▼                     from bodies + cost_attribution usage/identity
-PROMOTED LAKE  S3 Tables (Iceberg), Lake Formation grants
-  ├─ trajectories        — 1 row/run: ATIF doc + team/model/date partitions
-  ├─ steps               — exploded for SQL-level eval mining
-  └─ redaction_manifest  — detector provenance, labels, confidences, actions,
-                           classifier + taxonomy versions (separately permissioned)
-```
+## Core positions
 
-## The classification taxonomy is the product
+1. **The privacy boundary is at rest, before promotion, never in the request path.** The data plane stays fast and lossless, and nothing becomes queryable until the gate has run. In-path guardrails stay detect-only, as ADR-017 sets.
+2. **Classification comes first, PII second.** The gate answers "should this conversation exist in the lake", not only "which tokens look like PII".
+3. **Three actions: drop, restrict, redact.** The default taxonomy is small (HR, legal and corp-dev drop; security incidents and regulated markings restrict; entity PII redacts) and tenants extend it. Drop keeps a metadata stub only: team, timestamps, token counts and a category label, never the justification span.
+4. **Shadow mode before any gating.** Nobody knows what share of traffic is sensitive, so any threshold picked up front is a guess. Measure first, then decide where the drop line goes.
+5. **No human review queue for borderline HR content.** A reviewer reading a possibly sensitive HR transcript is the harm the feature exists to prevent. The gate over-drops instead, because a lost eval trajectory costs little and a leaked HR conversation costs a lot.
 
-A tenant-owned policy object (AppConfig, like guardrail config) maps categories to actions:
+## Phase 1 is shadow-only
 
-| Category (default set)                          | Default action |
-|-------------------------------------------------|----------------|
-| HR: performance management, comp, employee relations | **drop**       |
-| Legal: privilege, litigation hold                 | **drop**       |
-| Corp-dev: M&A, pre-announcement reorgs            | **drop**       |
-| Security: incident details, vuln reports          | **restrict** (security-team-only partition) |
-| Regulated markings: CUI, export-controlled, customer-confidential | **restrict** |
-| Entity PII / secrets (any category)               | **redact**     |
+Phase 1 is body capture, quarantine, classification and a manifest of labels and confidences, plus a measurement report (share of traffic per category and the confidence distribution). It promotes nothing, builds no lake and redacts nothing. Everything after Phase 1 waits for that report.
 
-Three actions, because deletion is not always right: a security-incident transcript may be exactly what the security team wants to mine, in a Lake Formation partition only they can read. **Drop** keeps a metadata stub only (team, timestamps, token counts, category label — never the justification span). The default taxonomy stays small and opinionated (the six rows above); tenants extend it, but shipping a large blank taxonomy invites a six-month governance committee.
+## Provisional choices
 
-## Shadow mode first — because "found incidentally" means the base rate is unknown
+These are the current leaning, to be confirmed with shadow data, and the positions above don't depend on them:
 
-Sensitive transcripts are found incidentally, which means nobody knows what fraction of traffic is sensitive, so any classifier threshold picked up front is a guess. Rollout is therefore:
-
-1. **Shadow (weeks 1–2+):** classify everything in quarantine, write labels + confidences to the manifest, promote nothing sensitive. Output: a measurement report — "N% of traffic touches HR topics, here is the confidence distribution, here is the proposed drop line." That report converts hesitation into a quantified, governed decision, and is itself the first deliverable an operator sees.
-2. **Gated promotion:** enable promote/drop/restrict at the tuned thresholds.
-3. **Continuous:** classifier version + taxonomy version stamped on every manifest row; a discovered miss becomes a taxonomy update + retroactive reclassification job over existing partitions (cheap under Iceberg: snapshot, reclassify, expire the old snapshot).
-
-## Deliberate positions (the ones that will be challenged)
-
-- **No in-path redaction.** Coding traffic is dense with PII-lookalikes (emails in git logs, names in blame output, account IDs in ARNs); mangling a response in flight breaks the product on a false positive. In-path stays detect/tag-only (ADR-011); enforcement is at promotion.
-- **No human review queue for borderline HR content.** A reviewer reading a possibly-sensitive HR transcript is precisely the harm this feature exists to prevent. Over-drop instead: a lost eval trajectory costs ~nothing at this volume; one sensitive HR conversation surfacing in an analyst's Athena query costs the program.
-- **Tune the judge for recall, accept over-dropping.** The trust-killer is a miss in the lake, not a false drop.
-- **Dropped-item manifests carry the category label only, never the quoted span.** The evidence is buried with the transcript; the manifest must not become the leak.
-- **No Amazon Comprehend.** Unavailable in the target environment. Entity detection = ApplyGuardrail (managed baseline, already integrated) + Presidio (self-hosted, in-VPC, tenant custom recognizers for employee IDs / internal usernames / ticket formats). Both write to the same manifest with detector provenance so their disagreement is measurable. Honest trade: vanilla Presidio has weaker natural-language name recall than a managed NER; in coding transcripts most PII is structured, where patterns + custom recognizers do well, and the drop-not-redact judge protects the conversations that matter. If name recall becomes a real gap, Presidio swaps in a GLiNER-class NER backend, still self-hosted.
-- **Attribution is a policy knob, surfaced explicitly.** Default: promoted trajectories carry team-level attribution only; user identity lives in a restricted mapping table. For the perf-management fear specifically, an unlinkable lake removes most of the chilling effect.
+- Promoted records use the ATIF v1.7 trajectory format.
+- The promoted store is Iceberg on S3 Tables, matching `audit_pipeline`.
+- Access to restricted partitions uses Lake Formation grants.
 
 ## Alternatives considered
 
-- **In-path redaction at the gateway** — rejected: latency + false-positive product breakage; the gateway's job is fidelity.
-- **Comprehend PII (managed NER)** — unavailable in the target environment; would anyway have covered only the commodity detector class.
-- **PII-only scope (no topic classification)** — rejected: fails the motivating case outright. Sensitive HR or classified content contains no detectable entities.
-- **Redact-everything instead of drop** — rejected for topic-sensitive content: the topic itself is the sensitive datum; no entity masking makes a sensitive HR conversation storable.
-- **Plain S3 + Glue Parquet (reuse audit_log pattern as-is)** — workable, but S3 Tables gives managed compaction/snapshots, and Iceberg snapshots are what make retroactive reclassification cheap. The audit_log module stays as-is; the lake is a sibling, not a retrofit.
+- **In-path redaction at the gateway.** Rejected. Coding traffic is full of PII lookalikes (emails in git logs, account IDs in ARNs), and a false positive in flight breaks the product.
+- **PII-only scope.** Rejected. It fails the motivating case, because sensitive HR or legal content has no detectable entities.
+- **Redact instead of drop for topic-sensitive content.** Rejected. The topic is the sensitive datum, and masking entities doesn't make the conversation safe to store.
+- **A separate plain S3 and Glue Parquet store.** Rejected. `audit_pipeline` already puts Iceberg on S3 Tables on main, which gives managed compaction and snapshots, so a Parquet and Glue store would add a second pattern for no gain.
 
 ## Consequences
 
-**Positive:** the adoption blocker inverts — a governed lake with a provable gate (manifest = audit trail: prove redaction ran without re-exposing what it removed); eval harvesting lands on a standard format (ATIF → Harbor/Athena/Spark directly); the control-plane moat argument (ADR-017) extends — attribution, budgets, and now governed transcripts are exactly what a bare data plane lacks.
+Positive: a lake with a provable gate, where the manifest shows that classification ran without re-exposing what it removed. Eval harvesting gets a standard format. The measurement report turns a vague worry into a number.
 
-**Negative / risks:** Stage-2 judge cost at high developer counts (mitigated by the Stage-1 screen and lake opt-in per team, but must be modeled in shadow mode); topic-classifier recall is unproven until shadow data exists (the design accepts over-dropping for exactly this reason); code-aware PII ambiguity (an email in `git blame` output the developer asked about is content, not incidental PII — tenant policy must pick a side, default redact); body capture increases data-plane log volume materially (quarantine lifecycle + compression bound it).
+Negative: classifier recall is unproven until shadow data exists, which is why the design accepts over-dropping. Judge cost grows with developer count and must be modeled in Phase 1. Body capture adds data-plane log volume. Code-aware ambiguity (an email in `git blame` output the developer asked about) needs a tenant policy, defaulting to redact.
 
-## Implementation seams (module shape)
+## Open questions
 
-1. `infrastructure/modules/transcript_lake/` — quarantine bucket (KMS, lifecycle, deny-human-read), S3 Tables namespace + three tables, Lake Formation grants, Step Functions pipeline, assembler Lambda. Gated by `enable_transcript_lake` (default `false`), like `enable_guardrails`/`enable_audit_log`.
-2. agentgateway body capture → existing Firehose path (new stream), keyed to join with the access log cost_attribution already parses.
-3. `src/transcript_gate/` — Stage-1 screen, Stage-2 judge client, Presidio runner, gitleaks runner, ATIF assembler (atif~=1.7.0), manifest writer. Classification policy as an AppConfig document per team.
-4. Shadow-mode report generator (Athena over the manifest) — the first deliverable an operator sees.
+- **How do request and response bodies leave agentgateway v1.7.0?** Nothing on main captures bodies, and ADR-017 pins the upstream image with no custom build. The agentgateway docs read on 2026-11-22 (standalone "latest", not tied to v1.7.0) describe three candidates: a request-log database where `frontendPolicies.accessLog.database.llm: full` stores prompt and completion payloads, OpenTelemetry export of logs and traces described as including request and response bodies, and CEL access-log fields that can read request data. Whether v1.7.0 supports any of these, and whether the rendered config can use them on ECS, is unestablished. Check against the v1.7.0 config schema before Phase 1.
+- Where quarantine lives and how it joins the access log that `cost_attribution` reads.
+- Which taxonomy categories ship by default, and who owns the tenant policy.
+- Whether secrets in transcripts, entity redaction detail and identity pseudonymization need their own ADRs.
 
 ## Sources
 
-- Harbor ATIF RFC 0001 (v1.7): https://github.com/harbor-framework/harbor/blob/main/rfcs/0001-trajectory-format.md
-- `atif` Pydantic models: https://pypi.org/project/atif/
-- Microsoft Presidio: https://github.com/microsoft/presidio
-- Bedrock ApplyGuardrail (standalone mode): https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-use-independent-api.html
+- agentgateway, View and customize logs (read 2026-11-22): https://agentgateway.dev/docs/standalone/latest/documentation/observability/access-logs/view/
+- agentgateway, Observe traffic (read 2026-11-22): https://agentgateway.dev/docs/standalone/latest/documentation/llm/observability/
+- Harbor ATIF RFC 0001: https://github.com/harbor-framework/harbor/blob/main/rfcs/0001-trajectory-format.md
 - Amazon S3 Tables: https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables.html
