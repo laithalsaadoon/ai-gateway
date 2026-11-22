@@ -1,6 +1,6 @@
 ---
 title: Code Quality
-description: Ruff, pyright, pytest, Terraform quality, and 12-tool security stack.
+description: Ruff, pyright, pytest, Terraform quality, and the security scanning stack.
 sidebar:
   order: 6
 ---
@@ -194,7 +194,7 @@ Configuration in `.terraform-docs.yml`:
 
 [Lefthook](https://github.com/evilmartians/lefthook) manages all git hooks. Configuration is in `lefthook.yml`.
 
-### Pre-commit (8 parallel checks)
+### Pre-commit (9 parallel checks)
 
 | Hook | Glob Filter | Auto-stages Fixes |
 |------|-------------|-------------------|
@@ -207,7 +207,7 @@ Configuration in `.terraform-docs.yml`:
 | terraform validate | `infrastructure/**/*.tf` | No |
 | terraform-docs | `infrastructure/**/*.tf` | Yes |
 
-### Pre-push (4 parallel checks)
+### Pre-push (5 parallel checks)
 
 | Hook | Scope |
 |------|-------|
@@ -236,21 +236,27 @@ All PRs require review from `@theagenticguy`. Infrastructure changes have an add
 
 ## Security Scanning Stack
 
-The project uses 12 security tools across development, CI, and deployment phases.
+The project uses these security tools across development, CI, release, and scheduled scans.
 
 | Tool | Category | What It Covers | Where It Runs |
 |------|----------|---------------|---------------|
 | [Semgrep](https://semgrep.dev/) | SAST | Python code analysis (OWASP Top 10, security audit) | Pre-push hook, CI |
+| [Bandit](https://bandit.readthedocs.io/) | SAST | Python security linting (SARIF upload, report-only) | CI |
 | [Gitleaks](https://gitleaks.io/) | Secrets | Prevents secrets from entering the repository | Pre-commit hook, CI |
 | [Checkov](https://www.checkov.io/) | IaC | Terraform security and compliance (2,500+ policies) | Pre-push hook, CI |
 | [Hadolint](https://github.com/hadolint/hadolint) | Dockerfile | Dockerfile best practices with ShellCheck integration | Pre-commit hook, CI |
 | [Trivy](https://trivy.dev/) | Container + FS | Vulnerability scanning of images and filesystem (HIGH + CRITICAL) | Pre-push hook, CI |
-| [Syft](https://github.com/anchore/syft) | SBOM | CycloneDX software bill of materials generation | CI, Release |
-| [Cosign](https://github.com/sigstore/cosign) | Signing | Keyless image signing via Sigstore OIDC | CI (main push), Release |
+| [pip-audit](https://github.com/pypa/pip-audit) | Dependencies | Audits locked Python dependencies for known vulnerabilities | `mise run security:deps`, CI |
+| [OSV-Scanner](https://google.github.io/osv-scanner/) | Dependencies | Scans every lockfile in the tree recursively (including `clients/admin_cli/uv.lock`) against the OSV database | `mise run security:osv`, CI, nightly rescan |
+| License policy (`scripts/check-licenses.py`) | Licenses | Fails on a dependency license that is not on the allowlist (strong and network copyleft families are denied) | Pre-push hook, `mise run security:licenses`, CI |
+| [actionlint](https://github.com/rhysd/actionlint) | Workflows | Lints GitHub Actions workflow files (shellcheck included) | Pre-commit hook, `mise run security:actionlint`, CI |
+| [Syft](https://github.com/anchore/syft) | SBOM | CycloneDX software bill of materials generation (SPDX too in releases) | CI, Release |
+| [Grype](https://github.com/anchore/grype) | SBOM rescan | Rescans the CI image SBOM for newly disclosed vulnerabilities | Nightly rescan |
+| [Cosign](https://github.com/sigstore/cosign) | Signing | Keyless image signing via Sigstore OIDC | Release |
 | [CodeQL](https://codeql.github.com/) | Code analysis | GitHub-native semantic code analysis (SARIF upload) | CI, Weekly schedule |
 | [OpenSSF Scorecard](https://scorecard.dev/) | Supply chain | Supply chain security posture assessment | CI (main push), Weekly |
 | [Dependency Review](https://github.com/actions/dependency-review-action) | Dependencies | PR-time vulnerability and license check (denies GPL-3.0, AGPL-3.0) | PR only |
-| [Dependabot](https://docs.github.com/en/code-security/dependabot) | Dependencies | Automated updates for Python, Terraform, and GitHub Actions | Weekly Monday 08:00 ET |
+| [Dependabot](https://docs.github.com/en/code-security/dependabot) | Dependencies | Automated updates for Python, Terraform, GitHub Actions, npm, and Docker | Weekly Monday 08:00 ET |
 | [TFLint](https://github.com/terraform-linters/tflint) | IaC | Terraform linting with AWS ruleset | CI |
 
 :::caution[Trivy supply chain advisory]

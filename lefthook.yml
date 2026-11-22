@@ -30,6 +30,9 @@ pre-commit:
       glob: "infrastructure/**/*.tf"
       run: terraform-docs markdown table --output-file README.md --output-mode inject infrastructure/ && git add infrastructure/README.md
       stage_fixed: true
+    workflow-lint:
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: actionlint
 
 pre-push:
   parallel: true
@@ -42,7 +45,10 @@ pre-push:
       glob: "infrastructure/**/*.tf"
       run: uvx checkov -d infrastructure/ --framework terraform --compact --quiet
     trivy-fs:
-      run: trivy fs --severity HIGH,CRITICAL --exit-code 1 --quiet .
+      run: trivy fs --severity HIGH,CRITICAL --exit-code 1 --skip-dirs .venv --quiet .
+    licenses:
+      glob: "{uv.lock,pyproject.toml}"
+      run: uv run --script scripts/check-licenses.py
 
 commit-msg:
   commands:

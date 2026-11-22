@@ -47,7 +47,20 @@ ignore = [
 "src/budget_enforcement/handler.py" = ["PLR0911"]  # multi-gate enforcement logic requires 7 return paths
 
 [lint.isort]
-known-first-party = ["app"]
+known-first-party = [
+    "gwcore",
+    "admin_token",
+    "budget_admin",
+    "budget_enforcement",
+    "chargeback_report",
+    "cost_attribution",
+    "pre_token",
+    "pricing_admin",
+    "rate_limiter",
+    "routing_config",
+    "team_registration",
+    "usage_api",
+]
 
 [format]
 quote-style = "double"

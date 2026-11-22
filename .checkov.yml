@@ -49,3 +49,8 @@ skip-check:
   - CKV_AWS_116  # DLQ accepted for sync control-plane; async audit pipeline is the follow-up
   - CKV_AWS_117  # Lambdas call AWS APIs + Bedrock over the AWS network; no VPC (avoids NAT)
   - CKV_AWS_272  # code-signing not configured; deploy artifacts are built in-pipeline
+  # Availability Zone lookup: the VPC takes only the first two AZ names
+  # (slice(data.aws_availability_zones.available.names, 0, 2) in main.tf), so
+  # a new AZ in the region cannot widen the subnet set. Checkov 3.3.20 added
+  # this check; pinning zone IDs would hard-code region-specific values.
+  - CKV_AWS_394  # AZ result is sliced to a fixed two; new AZs cannot expand it

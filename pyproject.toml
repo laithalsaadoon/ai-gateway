@@ -4,24 +4,24 @@ version = "0.1.0"
 description = "Lightweight LLM API Gateway — agentgateway on ECS Fargate"
 requires-python = ">=3.13"
 dependencies = [
-    "boto3>=1.43.56",
+    "boto3>=1.43.126",
     "email-validator>=2.3.0",
-    "pydantic>=2.13.4",
-    "pyjwt[crypto]>=2.13.0",
+    "pydantic>=2.14.3",
+    "pyjwt[crypto]>=2.15.1",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest>=9.1.1",
-    "ruff>=0.16.0",
-    "pyright>=1.1.411",
-    "boto3-stubs>=1.43.56",
-    "hypothesis>=6.161.6",
+    "pytest>=9.2.0",
+    "ruff>=0.17.4",
+    "pyright>=1.1.414",
+    "boto3-stubs>=1.43.126",
+    "hypothesis>=6.170.15",
     "atheris>=3.1.0",
     "pytest-cov>=7.1.0",
-    "commitizen>=4.16.5",
+    "commitizen>=4.19.3",
     "bandit[sarif]>=1.9.4",
-    "moto>=5.2.2",
+    "moto>=5.2.5",
 ]
 
 [tool.uv]
@@ -35,6 +35,7 @@ constraint-dependencies = [
 # 7-day exclude-newer soak window, so the security fix is exempted from it.
 [tool.uv.exclude-newer-package]
 cryptography = "2026-08-04"
+certifi = "2026-10-24"  # PYSEC-2026-4320 (GHSA-6q48-6c7w-9gw2): emSign roots with compromised intermediates
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

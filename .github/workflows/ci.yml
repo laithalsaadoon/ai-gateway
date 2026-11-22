@@ -42,12 +42,12 @@ jobs:
           fetch-depth: 2
 
       - name: Setup Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
       - name: Install dependencies
         run: uv sync --frozen
@@ -67,7 +67,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: hashFiles('tests/**/*.py') != '' && always()
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: coverage.xml
           fail_ci_if_error: false
@@ -105,7 +105,7 @@ jobs:
 
       - name: Upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         continue-on-error: true
         with:
           sarif_file: semgrep.sarif
@@ -122,7 +122,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
       - name: Install dependencies
         run: uv sync --frozen
@@ -132,7 +132,7 @@ jobs:
 
       - name: Upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         continue-on-error: true
         with:
           sarif_file: bandit.sarif
@@ -158,7 +158,7 @@ jobs:
 
       - name: Upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           sarif_file: results.sarif
           category: gitleaks
@@ -178,7 +178,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
       - name: Export locked dependencies
         run: uv export --frozen --no-dev --no-hashes > requirements.txt
@@ -188,18 +188,18 @@ jobs:
 
       - name: OSV-Scanner lockfile scan
         id: osv
-        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
         continue-on-error: true
         with:
           scan-args: |-
             --format=sarif
             --output=results.sarif
-            --lockfile=uv.lock
-            --lockfile=docs/pnpm-lock.yaml
+            --recursive
+            ./
 
       - name: Upload OSV-Scanner SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         with:
           sarif_file: results.sarif
           category: osv-scanner
@@ -228,14 +228,14 @@ jobs:
 
       - name: Upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         continue-on-error: true
         with:
           sarif_file: trivy-fs.sarif
           category: trivy-fs
 
   # ────────────────────────────────────────────────────────────
-  # 2d. License Compliance — pip-licenses
+  # 2d. License Compliance — scripts/check-licenses.py
   # ────────────────────────────────────────────────────────────
   licenses:
     name: License Compliance
@@ -247,28 +247,51 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: License check
-        run: uv run --frozen --with pip-licenses==4.4.0 pip-licenses
+      # Enforcing: exits non-zero on a license outside the allowlist. The allowlist,
+      # the denied families and the one evidenced exemption live in the script.
+      - name: License policy check
+        run: uv run --script scripts/check-licenses.py
 
+      # Kept so a human can read the full list when the gate above turns red.
       - name: Generate reports
+        if: always()
         run: |
-          uv run --frozen --with pip-licenses==4.4.0 pip-licenses --format=json --output-file=license-report.json
-          uv run --frozen --with pip-licenses==4.4.0 pip-licenses --format=markdown --output-file=license-report.md
+          uv run --frozen --with 'pip-licenses>=5.0.0' pip-licenses --from=mixed --format=json --output-file=license-report.json
+          uv run --frozen --with 'pip-licenses>=5.0.0' pip-licenses --from=mixed --format=markdown --output-file=license-report.md
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: license-reports
           path: |
             license-report.json
             license-report.md
           retention-days: 7
+
+  # ────────────────────────────────────────────────────────────
+  # 2e. Workflow lint — actionlint
+  # ────────────────────────────────────────────────────────────
+  workflow-lint:
+    name: Workflow Lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Same actionlint version as mise.toml, so local and CI agree.
+      - name: actionlint
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
+        with:
+          version: 1.7.12
+          fail-on-error: true
 
   # ────────────────────────────────────────────────────────────
   # 3. IaC Security — Terraform / Infrastructure
@@ -315,7 +338,7 @@ jobs:
         continue-on-error: true
 
       - name: Setup TFLint
-        uses: terraform-linters/setup-tflint@6e1e0642c0289bd619021bf6b34e3c08ed1e005a # v6
+        uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6
         with:
           tflint_version: "v0.63.1"
 
@@ -331,7 +354,7 @@ jobs:
 
       - name: Checkov IaC scan
         if: always()
-        uses: bridgecrewio/checkov-action@7b972723c44fb3d256283fac96fae5d7c1894bb7 # v12
+        uses: bridgecrewio/checkov-action@45edc9d8856b664db2ec251f5f8632361f0a67aa # v12
         with:
           directory: infrastructure/
           framework: terraform
@@ -342,7 +365,7 @@ jobs:
           download_external_modules: false
 
       - name: Upload Checkov SARIF
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         if: always()
         continue-on-error: true
         with:
@@ -372,10 +395,10 @@ jobs:
         run: grep -E '^[A-Z_][A-Z0-9_]*=' versions.env >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Build custom gateway image
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           push: false
@@ -389,14 +412,14 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Hadolint Dockerfile lint
-        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
           recursive: true
           format: sarif
           output-file: hadolint-results.sarif
 
       - name: Upload Hadolint SARIF
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         if: always()
         continue-on-error: true
         with:
@@ -414,7 +437,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
         if: always()
         continue-on-error: true
         with:
@@ -422,14 +445,14 @@ jobs:
           category: trivy
 
       - name: Generate SBOM with Syft
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           image: ${{ env.IMAGE_NAME }}:ci
           format: cyclonedx-json
           output-file: sbom.cyclonedx.json
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sbom-cyclonedx
           path: sbom.cyclonedx.json

@@ -112,7 +112,7 @@ Each sub-app is registered on the root app; each verb is a cyclopts command whos
 
 ## Errors & exit codes
 
-The response envelope is parsed by the client: a success body is returned as a dict (empty body → `None`), while a 4xx/5xx maps the gateway error envelope `{"error": {"code", "message", details?}}` to a `GatewayError`. `clients/admin_cli/admin_cli/client.py:263` The meta-app launcher catches `GatewayError` and prints a readable one-liner — `error: <code>: <message>` (plus ` (details)` when present) — to stderr, returning exit code `1`; a successful run returns `0`. `clients/admin_cli/admin_cli/commands.py:290` No stack trace is printed for a config, auth, or API error. The error `code` is the same stable machine-readable code the control plane emits (`config_error`, `token_error`, `body_error` locally; `validation_failed`, `not_found`, `conflict`, `forbidden`, `upstream_error`, etc. from the server — see the `ControlPlaneError` hierarchy in [reference/public-api](public-api.md)).
+The response envelope is parsed by the client: a success body is returned as a dict (empty body → `None`), while a 4xx/5xx maps the gateway error envelope `{"error": {"code", "message", details?}}` to a `GatewayError`. `clients/admin_cli/admin_cli/client.py:263` The meta-app launcher catches `GatewayError` and prints a readable one-liner — `error: <code>: <message>` (plus ` (details)` when present) — to stderr, returning exit code `1`; a successful run returns `0`. `clients/admin_cli/admin_cli/commands.py:290` No stack trace is printed for a config, auth, or API error. The error `code` is the same stable machine-readable code the control plane emits (`config_error`, `token_error`, `body_error` locally; `validation_failed`, `not_found`, `conflict`, `forbidden`, `upstream_error`, etc. from the server — see the `ControlPlaneError` hierarchy in [reference/public-api](public-api.md)). Usage errors caught by cyclopts itself (an unknown command, a missing argument) print a framed error panel and exit with code `2` since cyclopts 5.
 
 ## Examples
 
@@ -126,7 +126,7 @@ export COGNITO_DOMAIN="my-gateway"  AWS_REGION="us-east-1"
 uv run admin-cli teams create \
   --set team_name=payments-svc \
   --set contact_email=payments@example.com \
-  --set tier=premium
+  --set tier=high
 
 # Create a budget from a file, then page through budgets
 uv run admin-cli budgets create --body @budget.json
@@ -149,5 +149,3 @@ The CLI is tested with no live network or AWS: `tests/test_client.py` uses stdli
 - [reference/public-api](public-api.md) — the control-plane HTTP routes every command calls, and the `gwcore` `ADMIN_SCOPE` / `ControlPlaneError` surface the CLI mirrors.
 - [insights/contract-map](../insights/contract-map.md) — the HTTP response and error envelopes the CLI parses.
 - [architecture/module-map](../architecture/module-map.md) — the `src/` service packages behind each admin route.
-</content>
-</invoke>
