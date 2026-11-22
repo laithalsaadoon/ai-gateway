@@ -194,8 +194,8 @@ jobs:
           scan-args: |-
             --format=sarif
             --output=results.sarif
-            --lockfile=uv.lock
-            --lockfile=docs/pnpm-lock.yaml
+            --recursive
+            ./
 
       - name: Upload OSV-Scanner SARIF
         if: always()
@@ -235,7 +235,7 @@ jobs:
           category: trivy-fs
 
   # ────────────────────────────────────────────────────────────
-  # 2d. License Compliance — pip-licenses
+  # 2d. License Compliance — scripts/check-licenses.py
   # ────────────────────────────────────────────────────────────
   licenses:
     name: License Compliance
@@ -252,13 +252,17 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: License check
-        run: uv run --frozen --with pip-licenses==4.4.0 pip-licenses
+      # Enforcing: exits non-zero on a license outside the allowlist. The allowlist,
+      # the denied families and the one evidenced exemption live in the script.
+      - name: License policy check
+        run: uv run --script scripts/check-licenses.py
 
+      # Kept so a human can read the full list when the gate above turns red.
       - name: Generate reports
+        if: always()
         run: |
-          uv run --frozen --with pip-licenses==4.4.0 pip-licenses --format=json --output-file=license-report.json
-          uv run --frozen --with pip-licenses==4.4.0 pip-licenses --format=markdown --output-file=license-report.md
+          uv run --frozen --with 'pip-licenses>=5.0.0' pip-licenses --from=mixed --format=json --output-file=license-report.json
+          uv run --frozen --with 'pip-licenses>=5.0.0' pip-licenses --from=mixed --format=markdown --output-file=license-report.md
 
       - name: Upload reports
         if: always()
@@ -269,6 +273,25 @@ jobs:
             license-report.json
             license-report.md
           retention-days: 7
+
+  # ────────────────────────────────────────────────────────────
+  # 2e. Workflow lint — actionlint
+  # ────────────────────────────────────────────────────────────
+  workflow-lint:
+    name: Workflow Lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Same actionlint version as mise.toml, so local and CI agree.
+      - name: actionlint
+        uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
+        with:
+          version: 1.7.12
+          fail-on-error: true
 
   # ────────────────────────────────────────────────────────────
   # 3. IaC Security — Terraform / Infrastructure

@@ -12,7 +12,7 @@ python = "3.13"
 "aqua:hadolint/hadolint" = "2.14.0"
 "aqua:evilmartians/lefthook" = "2.1.4"
 "aqua:zricethezav/gitleaks" = "8.30.1"
-"aqua:rhysd/actionlint" = "1.7.11"
+"aqua:rhysd/actionlint" = "1.7.12"
 
 # IaC
 "aqua:hashicorp/terraform" = "1.14.8"
@@ -32,10 +32,6 @@ PYTHONUNBUFFERED = "1"
 [tasks.install]
 description = "Install all project dependencies and git hooks"
 run = ["uv sync", "lefthook install"]
-
-[tasks.dev]
-description = "Run the API gateway in development mode"
-run = "uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
 
 [tasks.test]
 description = "Run test suite"
@@ -60,7 +56,7 @@ run = "uv run pyright src/"
 
 [tasks.security]
 description = "Run all security scans"
-depends = ["security:sast", "security:secrets", "security:iac", "security:dockerfile", "security:fs", "security:deps", "security:osv"]
+depends = ["security:sast", "security:secrets", "security:iac", "security:dockerfile", "security:fs", "security:deps", "security:osv", "security:licenses", "security:actionlint"]
 
 [tasks."security:sast"]
 description = "SAST scan with semgrep"
@@ -84,7 +80,7 @@ run = "trivy image --severity HIGH,CRITICAL --exit-code 1 ai-gateway:latest"
 
 [tasks."security:fs"]
 description = "Filesystem vulnerability scan with trivy"
-run = "trivy fs --severity HIGH,CRITICAL --exit-code 1 ."
+run = "trivy fs --severity HIGH,CRITICAL --exit-code 1 --skip-dirs .venv ."
 
 [tasks."security:deps"]
 description = "Audit Python dependencies for known vulnerabilities"
@@ -95,8 +91,16 @@ description = "Rescan latest SBOM with Grype (catches newly disclosed CVEs)"
 run = "grype sbom.cyclonedx.json --fail-on high"
 
 [tasks."security:osv"]
-description = "Scan lockfiles against OSV vulnerability database"
-run = "osv-scanner scan --lockfile uv.lock --lockfile docs/pnpm-lock.yaml"
+description = "Scan every lockfile in the tree against the OSV database"
+run = "osv-scanner scan source -r ."
+
+[tasks."security:licenses"]
+description = "Fail on a dependency license that is not on the allowlist"
+run = "uv run --script scripts/check-licenses.py"
+
+[tasks."security:actionlint"]
+description = "Lint GitHub Actions workflows (shellcheck included)"
+run = "actionlint"
 
 # ──────────────────────────────────────────────
 # Terraform tasks
