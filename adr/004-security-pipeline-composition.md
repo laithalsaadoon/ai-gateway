@@ -1,8 +1,10 @@
 # ADR-004: 3-Phase Container Security Pipeline
 
-**Status**: Accepted
+**Status**: Accepted (amended)
 **Date**: 2026-03-18
-**Deciders**: AI Engineering NAMER
+**Deciders**: Project maintainers
+
+> **Update:** The "skip grype" and "skip osv-scanner" calls below were later reversed. CI runs osv-scanner recursively over every lockfile in the tree, and the nightly rescan workflow runs grype and osv-scanner against the SBOM that CI produces. CI also enforces a license allowlist and lints the workflow files with actionlint. The 3-phase container pipeline itself stands.
 
 ## Context
 
