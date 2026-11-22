@@ -100,10 +100,10 @@ jobs:
         uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
         with:
           scan-args: |-
-            --lockfile=uv.lock
-            --lockfile=docs/pnpm-lock.yaml
             --format=sarif
             --output=osv-results.sarif
+            --recursive
+            ./
         continue-on-error: true
 
       - name: Upload OSV-Scanner SARIF
