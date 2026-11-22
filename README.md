@@ -216,6 +216,7 @@ Architectural Decision Records are in the `adr/` directory.
 | [015](adr/015-openai-responses-bedrock-mantle-proxy.md) | OpenAI Responses → Bedrock mantle proxy (openai provider + custom_host, no fork) | Accepted |
 | [016](adr/016-control-plane-api-foundation.md) | Control-Plane API Foundation (`gwcore` shared package) | Accepted |
 | [017](adr/017-agentgateway-data-plane-spike.md) | agentgateway as the data plane (replaces Portkey OSS) | Accepted |
+| [018](adr/018-transcript-lake-classification-gate.md) | Governed transcript lake with a classification-first privacy gate | Proposed |
 
 ## Scripts
 
