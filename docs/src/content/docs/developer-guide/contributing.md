@@ -69,6 +69,7 @@ The `(<scope>)` part is optional. When used, it should reference the module or a
 | terraform fmt | `infrastructure/**/*.tf` | No (check only) |
 | terraform validate | `infrastructure/**/*.tf` | No |
 | terraform-docs | `infrastructure/**/*.tf` | Yes (regenerates and stages README) |
+| actionlint | `.github/workflows/*.{yml,yaml}` staged files | No |
 
 ### Pre-push (runs before push)
 
@@ -78,6 +79,7 @@ The `(<scope>)` part is optional. When used, it should reference the module or a
 | semgrep | Full repository (OWASP Top 10 rules) |
 | checkov | `infrastructure/` (Terraform framework) |
 | trivy fs | Full repository (HIGH + CRITICAL) |
+| license policy | Runs `scripts/check-licenses.py` when `uv.lock` or `pyproject.toml` changed |
 
 ### Commit-msg
 
@@ -95,7 +97,7 @@ mise run ci
 mise run lint          # ruff check + format check
 mise run typecheck     # pyright on src/
 mise run test          # pytest on tests/
-mise run security      # all security scans (SAST, secrets, IaC, Dockerfile, trivy fs)
+mise run security      # all security scans (SAST, secrets, IaC, Dockerfile, trivy fs, pip-audit, OSV, licenses, actionlint)
 
 # Format code (auto-fix)
 mise run format        # ruff format + ruff check --fix + terraform fmt
@@ -116,7 +118,6 @@ All tasks are defined in `mise.toml` and run with `mise run <task>`.
 | Task | Description |
 |------|-------------|
 | `install` | Install all project dependencies and git hooks |
-| `dev` | Run the API gateway in development mode (uvicorn, port 8000) |
 | `test` | Run test suite with pytest |
 | `lint` | Run ruff linter and format check |
 | `format` | Auto-format Python (ruff) and Terraform (fmt) |
@@ -126,13 +127,18 @@ All tasks are defined in `mise.toml` and run with `mise run <task>`.
 
 | Task | Description |
 |------|-------------|
-| `security` | Run all security scans (depends on all sub-tasks below) |
+| `security` | Run all security scans (depends on `security:sast`, `security:secrets`, `security:iac`, `security:dockerfile`, `security:fs`, `security:deps`, `security:osv`, `security:licenses`, and `security:actionlint`) |
 | `security:sast` | SAST scan with semgrep (OWASP Top 10, security audit) |
 | `security:secrets` | Secret detection with gitleaks |
 | `security:iac` | IaC security scan with checkov (Terraform framework) |
 | `security:dockerfile` | Lint Dockerfiles with hadolint |
 | `security:image` | Scan container image with trivy (HIGH + CRITICAL) |
 | `security:fs` | Filesystem vulnerability scan with trivy |
+| `security:deps` | Audit Python dependencies with pip-audit |
+| `security:osv` | Scan every lockfile in the tree against the OSV database (`osv-scanner scan source -r .`) |
+| `security:licenses` | Fail on a dependency license that is not on the allowlist (`scripts/check-licenses.py`) |
+| `security:actionlint` | Lint GitHub Actions workflows with actionlint |
+| `security:sbom-rescan` | Rescan a CycloneDX SBOM with Grype |
 
 ### Terraform Tasks
 
@@ -161,18 +167,36 @@ All tasks are defined in `mise.toml` and run with `mise run <task>`.
 | `ci:lint` | Validate GitHub Actions workflows with actionlint |
 | `ci:validate` | Validate all CI + quality gates in one shot |
 
+### Release Tasks
+
+| Task | Description |
+|------|-------------|
+| `release:bump` | Auto-bump version based on commit history, generate changelog, and tag |
+| `release:bump-patch` / `release:bump-minor` / `release:bump-major` | Force a specific version bump with changelog |
+| `release:changelog` | Preview changelog for unreleased changes (dry-run) |
+
+### Dependency Tasks
+
+| Task | Description |
+|------|-------------|
+| `deps:upgrade` | Upgrade all deps (Python, npm, Terraform) and regenerate every lockfile |
+| `deps:python` / `deps:npm` / `deps:terraform` | Upgrade one ecosystem |
+| `deps:lock` | Re-resolve all lockfiles from current manifests without upgrading |
+
 ### Documentation Tasks
 
 | Task | Description |
 |------|-------------|
+| `docs:install` | Install documentation site dependencies |
 | `docs:serve` | Serve documentation locally with hot reload |
 | `docs:build` | Build documentation site |
+| `docs:preview` | Preview the built documentation site |
 
 ## Pull Request Requirements
 
 Before a PR can be merged:
 
-1. **All CI jobs must pass** -- quality, SAST, IaC security, and container security.
+1. **All CI jobs must pass** -- code quality, Semgrep, Bandit, secret detection, dependency audit, filesystem scan, license compliance, workflow lint, IaC security, and container security.
 2. **CODEOWNERS review** -- `@theagenticguy` is the default owner for all files. Infrastructure changes (`infrastructure/`) require explicit review.
 3. **Dependency review** -- The dependency-review workflow blocks PRs that introduce HIGH/CRITICAL vulnerabilities or GPL-3.0/AGPL-3.0 licensed dependencies.
 4. **Conventional commit messages** -- Every commit in the PR must follow the format.

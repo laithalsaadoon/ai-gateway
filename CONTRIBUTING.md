@@ -107,7 +107,8 @@ The release workflow (`release.yml`) builds, signs, and publishes the container 
 
 ## Security
 
-- Run `mise run security` before submitting PRs that touch application code
+- Run `mise run security` before submitting PRs that touch application code. It runs SAST, secrets, IaC, Dockerfile, filesystem, dependency, OSV, license, and workflow-lint scans
+- A new dependency must carry a license on the allowlist in `scripts/check-licenses.py`; copyleft families are denied. The `licenses` job in CI and the pre-push hook both fail on a violation
 - Never commit secrets, API keys, or credentials — use AWS Secrets Manager
 - Report vulnerabilities via [GitHub Security Advisories](https://github.com/theagenticguy/ai-gateway/security/advisories), not public issues (see [SECURITY.md](.github/SECURITY.md))
 

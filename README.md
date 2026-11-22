@@ -37,7 +37,7 @@ Detailed architecture diagrams live in the [developer guide](docs/src/content/do
 | [AWS CLI](https://aws.amazon.com/cli/) | v2 | AWS operations |
 | [Docker](https://www.docker.com/) | latest | Container builds and local testing |
 
-mise will install pinned versions of Python 3.13, Terraform 1.14.8, lefthook, checkov, trivy, hadolint, and gitleaks automatically from `mise.toml`.
+mise will install pinned versions of Python 3.13, Terraform 1.14.8, Terragrunt, terraform-docs, TFLint, lefthook, checkov, trivy, grype, osv-scanner, hadolint, gitleaks, and actionlint automatically from `mise.toml`.
 
 ## Quick Start
 
@@ -70,19 +70,21 @@ All project tasks are defined in `mise.toml` and run with `mise run <task>`:
 | Task | Command | Description |
 |------|---------|-------------|
 | `install` | `mise run install` | Install Python dependencies and git hooks |
-| `dev` | `mise run dev` | Run the API gateway locally with hot reload (port 8000) |
 | `test` | `mise run test` | Run the test suite with pytest |
 | `lint` | `mise run lint` | Run ruff linter and format check |
 | `format` | `mise run format` | Auto-format Python (ruff) and Terraform (fmt) |
 | `typecheck` | `mise run typecheck` | Run pyright type checker |
-| `security` | `mise run security` | Run all security scans (SAST, secrets, IaC, Dockerfile) |
+| `security` | `mise run security` | Run all security scans (SAST, secrets, IaC, Dockerfile, trivy fs, pip-audit, OSV, licenses, actionlint) |
 | `security:sast` | `mise run security:sast` | SAST scan with semgrep |
 | `security:secrets` | `mise run security:secrets` | Secret detection with gitleaks |
 | `security:iac` | `mise run security:iac` | IaC security scan with checkov |
 | `security:dockerfile` | `mise run security:dockerfile` | Lint Dockerfiles with hadolint |
 | `security:image` | `mise run security:image` | Scan container image with trivy |
 | `security:fs` | `mise run security:fs` | Filesystem vulnerability scan with trivy |
-| `security:osv` | `mise run security:osv` | Scan lockfiles against OSV vulnerability database |
+| `security:deps` | `mise run security:deps` | Audit Python dependencies with pip-audit |
+| `security:osv` | `mise run security:osv` | Scan every lockfile in the tree against the OSV database |
+| `security:licenses` | `mise run security:licenses` | Fail on a dependency license that is not on the allowlist |
+| `security:actionlint` | `mise run security:actionlint` | Lint GitHub Actions workflows |
 | `security:sbom-rescan` | `mise run security:sbom-rescan` | Rescan SBOM with Grype for newly disclosed CVEs |
 | `tf:init` | `mise run tf:init` | Initialize Terraform |
 | `tf:plan` | `mise run tf:plan` | Terraform plan (dry-run) |
@@ -91,6 +93,8 @@ All project tasks are defined in `mise.toml` and run with `mise run <task>`:
 | `ci` | `mise run ci` | Full CI pipeline (lint, typecheck, test, security) |
 | `ci:lint` | `mise run ci:lint` | Validate GitHub Actions workflows with actionlint |
 | `ci:validate` | `mise run ci:validate` | Validate all CI + quality gates in one shot |
+| `docs:serve` / `docs:build` | `mise run docs:serve` | Serve or build the Starlight documentation site |
+| `deps:upgrade` | `mise run deps:upgrade` | Upgrade Python, npm, and Terraform dependencies and regenerate every lockfile |
 
 ### Git Hooks
 
@@ -107,6 +111,8 @@ All project tasks are defined in `mise.toml` and run with `mise run <task>`:
 | hadolint | `Dockerfile*` staged files |
 | terraform fmt | `infrastructure/**/*.tf` |
 | terraform validate | `infrastructure/**/*.tf` |
+| terraform-docs | `infrastructure/**/*.tf` (regenerates and stages the README) |
+| actionlint | `.github/workflows/*.{yml,yaml}` |
 
 **pre-push** (runs before push):
 
@@ -116,6 +122,7 @@ All project tasks are defined in `mise.toml` and run with `mise run <task>`:
 | semgrep | Full repository |
 | checkov | `infrastructure/**/*.tf` |
 | trivy fs | Full repository |
+| license policy | `scripts/check-licenses.py`, when `uv.lock` or `pyproject.toml` changed |
 
 **commit-msg** (validates commit message format):
 
@@ -137,10 +144,12 @@ The project implements a multi-layered security scanning pipeline across develop
 | Container | [Trivy](https://trivy.dev/) | Vulnerability scanning of container images (HIGH + CRITICAL) |
 | Filesystem | [Trivy](https://trivy.dev/) | Repository filesystem scan for misconfigurations and vulnerabilities |
 | Dependencies | [pip-audit](https://github.com/pypa/pip-audit) | Python dependency vulnerability audit |
-| Dependencies | [OSV-Scanner](https://github.com/google/osv-scanner) | Lockfile scanning (uv.lock + pnpm-lock.yaml) against OSV database |
+| Dependencies | [OSV-Scanner](https://github.com/google/osv-scanner) | Recursive lockfile scanning (every lockfile in the tree) against OSV database |
 | Dependencies | [Dependency Review](https://github.com/actions/dependency-review-action) | PR-time vulnerability and license check (denies GPL-3.0, AGPL-3.0) |
 | Dependencies | [Dependabot](https://docs.github.com/en/code-security/dependabot) | Automated updates for Python, npm, Terraform, Actions, and Docker |
-| Licenses | [pip-licenses](https://github.com/raimon49/pip-licenses) | License compliance reporting (JSON + Markdown) |
+| Licenses | `scripts/check-licenses.py` | Enforced license allowlist (copyleft families denied); fails the `licenses` CI job and the pre-push hook |
+| Licenses | [pip-licenses](https://github.com/raimon49/pip-licenses) | License reports (JSON + Markdown) uploaded as CI artifacts |
+| Workflows | [actionlint](https://github.com/rhysd/actionlint) | GitHub Actions workflow linting (ShellCheck included) in CI and pre-commit |
 | SBOM | [Syft](https://github.com/anchore/syft) | CycloneDX + SPDX software bill of materials generation |
 | Signing | [Cosign](https://github.com/sigstore/cosign) | Keyless image signing via Sigstore OIDC |
 | Supply chain | [OpenSSF Scorecard](https://scorecard.dev/) | Supply chain security posture assessment |
@@ -148,29 +157,21 @@ The project implements a multi-layered security scanning pipeline across develop
 | ECR Scanning | [Amazon Inspector](https://aws.amazon.com/inspector/) | Continuous container image scanning in ECR (re-evaluates on new CVEs) |
 | Provenance | [GitHub Attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) | SLSA build provenance for released container images |
 
-All GitHub Actions are pinned to SHA hashes. Dependabot monitors 5 ecosystems (Python, npm, Terraform, Actions, Docker) weekly. In CI, scanning follows a layered pipeline: **SAST** (Semgrep + Bandit + Gitleaks), **dependency audit** (pip-audit + OSV-Scanner + Trivy FS), **IaC** (Checkov + TFLint), **container** (Hadolint + Trivy + SBOM), and **compliance** (license check). A nightly **rescan** workflow re-evaluates the latest SBOM and container image against updated vulnerability databases using Grype, OSV-Scanner, and Trivy. Amazon Inspector provides continuous ECR scanning in production. See [ADR-004](adr/004-security-pipeline-composition.md) for the full rationale.
+All GitHub Actions are pinned to SHA hashes. Dependabot monitors 5 ecosystems (Python, npm, Terraform, Actions, Docker) weekly. In CI, scanning follows a layered pipeline: **SAST** (Semgrep + Bandit + Gitleaks), **dependency audit** (pip-audit + OSV-Scanner + Trivy FS), **IaC** (Checkov + TFLint), **container** (Hadolint + Trivy + SBOM), and **compliance** (license allowlist and workflow lint). A nightly **rescan** workflow re-evaluates the latest SBOM and container image against updated vulnerability databases using Grype, OSV-Scanner, and Trivy. Amazon Inspector provides continuous ECR scanning in production. See [ADR-004](adr/004-security-pipeline-composition.md) for the full rationale.
 
 ## Infrastructure
 
-All Terraform configuration lives in the `infrastructure/` directory.
+All Terraform configuration lives in the `infrastructure/` directory. The root module composes local sub-modules under `infrastructure/modules/` (networking, auth, compute, observability, admin API, budgets, and more); the [infrastructure README](infrastructure/README.md) lists each module and the variable that enables it.
 
 | File | Purpose |
 |------|---------|
+| `main.tf` | Wires the sub-modules together |
 | `providers.tf` | AWS provider configuration with default resource tags |
-| `versions.tf` | Terraform and provider version constraints (AWS ~> 6.22) |
+| `versions.tf` | Terraform and provider version constraints (AWS ~> 6.22) and the S3 backend |
 | `variables.tf` | Core input variables (region, environment, VPC CIDR, ECS sizing) |
-| `variables_auth.tf` | Authentication variables (Cognito pool ID, JWT auth toggle) |
-| `vpc.tf` | VPC with 2 AZs, public/private subnets, single NAT Gateway, VPC endpoints |
-| `alb.tf` | Application Load Balancer, HTTPS/HTTP listeners, target group for gateway |
-| `alb_auth.tf` | ALB JWT validation listener (Cognito-backed, conditionally enabled) |
-| `cognito.tf` | Cognito User Pool, resource server (OAuth scopes), M2M client, domain |
-| `ecs.tf` | ECS Fargate cluster, service, agentgateway data-plane + OTel sidecar containers, autoscaling |
-| `ecr.tf` | ECR repository with immutable tags, scan-on-push, lifecycle policy |
-| `iam.tf` | Task execution role (ECR + Secrets Manager) and task role (Bedrock + observability) |
-| `secrets.tf` | Secrets Manager entries for provider API keys (OpenAI, Anthropic, Google, Azure) |
-| `waf.tf` | WAFv2 Web ACL with AWS Managed Rules, IP reputation list, and per-IP rate limiting |
-| `cloudwatch.tf` | Log groups for gateway and OTel collector |
-| `dashboard.tf` | CloudWatch saved queries and operational dashboard |
+| `variables_*.tf` | Feature variables grouped by area (admin API, AppConfig, audit, budgets, chargeback, clients, cost, guardrails, inspector, routing) |
+| `guards.tf` | Plan-time guard rails that reject unsafe flag combinations |
+| `moved.tf` | `moved` blocks for the move from a flat root module to sub-modules |
 | `outputs.tf` | ALB DNS, ECS cluster/service names, ECR URL, Cognito endpoints |
 | `otel-config.yaml` | OpenTelemetry Collector configuration (traces to X-Ray, metrics to EMF, logs to CloudWatch) |
 
@@ -201,16 +202,16 @@ Architectural Decision Records are in the `adr/` directory.
 | [001](adr/001-portkey-oss-over-litellm.md) | Portkey OSS as LLM Gateway Proxy | Accepted |
 | [002](adr/002-python-slim-over-chainguard.md) | python:3.13-slim Over Chainguard for Container Base Image | Accepted |
 | [003](adr/003-single-nat-gw-with-vpc-endpoints.md) | Single NAT Gateway + VPC Endpoints for Cost Optimization | Accepted |
-| [004](adr/004-security-pipeline-composition.md) | 3-Phase Container Security Pipeline | Accepted |
-| [005](adr/005-alb-jwt-validation-over-api-gateway.md) | ALB JWT Validation Over API Gateway for Auth | Accepted |
-| [006](adr/006-portkey-dual-format-api.md) | Portkey OSS Natively Serves Both OpenAI and Anthropic API Formats | Accepted |
+| [004](adr/004-security-pipeline-composition.md) | 3-Phase Container Security Pipeline | Accepted (amended) |
+| [005](adr/005-alb-jwt-validation-over-api-gateway.md) | ALB JWT Validation Over API Gateway for Auth | Proposed |
+| [006](adr/006-portkey-dual-format-api.md) | Portkey OSS Natively Serves Both OpenAI and Anthropic API Formats | Accepted (amended) |
 | [007](adr/007-terraform-provider-upgrade-for-jwt.md) | Upgrade AWS Terraform Provider to >= 6.22 for ALB JWT Validation | Accepted |
 | [008](adr/008-multi-tenant-client-isolation.md) | Multi-Tenant Client Isolation via Per-Team Cognito App Clients | Accepted |
 | [009](adr/009-provider-routing-strategy.md) | Provider Routing Strategy | Accepted |
 | [010](adr/010-cost-attribution-pipeline.md) | Cost Attribution Pipeline via Lambda + CloudWatch Metrics | Accepted |
 | [011](adr/011-bedrock-guardrails-integration.md) | Bedrock Guardrails Integration for Content Safety Filtering | Accepted |
 | [012](adr/012-response-cache-strategy.md) | Response Cache Strategy with ElastiCache Redis | Superseded by 017 |
-| [013](adr/013-identity-center-saml-federation.md) | Identity Center SAML/OIDC Federation for User SSO | Accepted |
+| [013](adr/013-identity-center-saml-federation.md) | Identity Center SAML/OIDC Federation for User SSO | Proposed |
 | [014](adr/014-two-plane-architecture-split.md) | Two-Plane Architecture Split (ALB Inference + API Gateway Admin) | Accepted |
 | [015](adr/015-openai-responses-bedrock-mantle-proxy.md) | OpenAI Responses → Bedrock mantle proxy (openai provider + custom_host, no fork) | Accepted |
 | [016](adr/016-control-plane-api-foundation.md) | Control-Plane API Foundation (`gwcore` shared package) | Accepted |
@@ -221,6 +222,11 @@ Architectural Decision Records are in the `adr/` directory.
 | Script | Purpose |
 |--------|---------|
 | `scripts/get-gateway-token.sh` | Obtains a Cognito M2M access token via `client_credentials` grant. Requires `GATEWAY_CLIENT_ID`, `GATEWAY_CLIENT_SECRET`, and `GATEWAY_TOKEN_ENDPOINT` environment variables. Outputs the raw JWT to stdout for use as a Bearer token. |
+| `scripts/gateway-setup.sh` | Interactive onboarding wizard: checks gateway connectivity and authentication, then generates the environment variables for the agent you pick. |
+| `scripts/check-health.sh` | Health check: gateway connectivity, authentication, token validity, and an optional live inference probe. |
+| `scripts/onboard-client.sh` | Reads the Terraform outputs and prints the Cognito client ID, client secret, and token endpoint for a team. |
+| `scripts/sso-login.sh` | Browser SSO login through Cognito: captures the authorization code on a temporary local server and prints the access token. |
+| `scripts/bot-push.py` | Pushes local changes to GitHub as verified bot commits (`mise run bot:push`). |
 | `scripts/cw-queries.sh` | Runs CloudWatch Logs Insights queries against the gateway log group. Supports individual queries (`requests`, `errors`, `latency`, `endpoints`) or `all`. Configurable via `LOG_GROUP`, `START_TIME`, and `END_TIME` environment variables. |
 
 ## Agent Compatibility
@@ -242,7 +248,7 @@ The gateway supports six AI coding agents across two API formats. See [docs/src/
 2. Create a feature branch from `main`.
 3. Make your changes and ensure all quality gates pass (`mise run ci`).
 4. Open a pull request against `main`.
-5. All CI checks must pass before merge. The pipeline runs lint, IaC security scanning, container image scanning, and deploys to production on merge to `main`.
+5. All CI checks must pass before merge. The pipeline runs quality, SAST, dependency, license, IaC, and container checks. Pushing a `v*` tag triggers the release workflow, which publishes and signs the image.
 
 ## License
 

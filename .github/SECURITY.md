@@ -44,10 +44,12 @@ This project runs automated security scans on every push and pull request:
 | Container | [Trivy](https://trivy.dev/) | Vulnerability scanning of container images (HIGH + CRITICAL) |
 | Filesystem | [Trivy](https://trivy.dev/) | Repository filesystem scan for misconfigurations |
 | Dependencies | [pip-audit](https://github.com/pypa/pip-audit) | Python dependency vulnerability audit |
-| Dependencies | [OSV-Scanner](https://github.com/google/osv-scanner) | Lockfile scanning (uv.lock + pnpm-lock.yaml) against OSV database |
+| Dependencies | [OSV-Scanner](https://github.com/google/osv-scanner) | Recursive lockfile scanning (every lockfile in the tree, including uv.lock, docs/pnpm-lock.yaml, and clients/admin_cli/uv.lock) against OSV database |
 | Dependencies | [Dependency Review](https://github.com/actions/dependency-review-action) | PR-time vulnerability and license check |
 | Dependencies | [Dependabot](https://docs.github.com/en/code-security/dependabot) | Automated updates for Python, npm, Terraform, Actions, Docker |
-| Licenses | [pip-licenses](https://github.com/raimon49/pip-licenses) | License compliance reporting (JSON + Markdown) |
+| Licenses | `scripts/check-licenses.py` | Enforced license allowlist; copyleft families denied (fails the `licenses` CI job and the pre-push hook) |
+| Licenses | [pip-licenses](https://github.com/raimon49/pip-licenses) | License reports (JSON + Markdown artifacts) |
+| Workflow lint | [actionlint](https://github.com/rhysd/actionlint) | GitHub Actions workflow linting with ShellCheck (CI and pre-commit) |
 | SBOM | [Syft](https://github.com/anchore/syft) | CycloneDX + SPDX software bill of materials generation |
 | Signing | [Cosign](https://github.com/sigstore/cosign) | Keyless image signing via Sigstore OIDC |
 | Supply chain | [OpenSSF Scorecard](https://scorecard.dev/) | Supply chain security posture assessment |
@@ -64,4 +66,5 @@ Container base images used in CI workflows are pinned by digest to prevent tag r
 - Terraform providers are version-constrained in `versions.tf` and all child modules
 - Dependabot monitors 5 ecosystems (Python, npm, Terraform, Actions, Docker) weekly
 - The Dependency Review action blocks PRs introducing HIGH+ severity vulnerabilities or GPL-3.0/AGPL-3.0 licenses
-- OSV-Scanner checks both `uv.lock` and `docs/pnpm-lock.yaml` lockfiles
+- OSV-Scanner scans every lockfile in the tree, including `uv.lock`, `docs/pnpm-lock.yaml`, and `clients/admin_cli/uv.lock`
+- The license gate (`scripts/check-licenses.py`) allows only listed licenses and denies copyleft families; the one exemption (atheris) carries its evidence in the script
